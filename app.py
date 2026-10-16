@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 from src.services.image_services.image_to_text_service import ImageToTextService
-from src.services.minio_service import MinioService
 from src.services.api_document_service import ApiDocumentService
 from src.adapters.api_document_adapter.json_to_text_adapter import JsonAdapter
 from src.adapters.api_document_adapter.yaml_to_text_adapter import YamlAdapter
@@ -10,7 +9,9 @@ import logging
 import json
 import os
 import yaml
+import requests
 from minio.error import S3Error
+from dotenv import load_dotenv
 
 app = Flask(__name__)
 
@@ -20,12 +21,12 @@ logger = logging.getLogger(__name__)
 # Subir el documento a MinIO y obtener la URL
 json_adapter = JsonAdapter()
 yaml_adapter = YamlAdapter()
-minio_service = MinioService()
 api_document_service = ApiDocumentService(json_adapter, yaml_adapter)
 logger.debug('Iniciando conversión de imagen a texto')
 image_to_text_service = ImageToTextService()
+api_storage_url = os.environ.get('API_STORAGE_URL', 'http://joyit-cn-ai-storage:5500/upload')
 
-ALLOWED_TYPES = ['docx', 'pdf', 'pptx', 'excel', 'jpg', 'png', 'jpeg']
+ALLOWED_TYPES = ['docx', 'pdf', 'jpg', 'png', 'jpeg', 'yaml', 'json']
 
 @app.route('/', methods=['GET'])
 def welcome():
@@ -83,7 +84,7 @@ def process_document():
                 'docx': 'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,',
                 'doc': 'data:application/msword;base64,',
                 'json': 'data:application/json;base64,',
-                'yaml': 'data:application/x-yaml;base64,'
+                'yaml': 'data:application/x-yaml;base64,'  
             }
 
             if doc_type in mime_headers:
@@ -131,7 +132,7 @@ def process_document():
                     file_content = file.read()
             else:
                 with open(temp_file_name, 'rb') as file:
-                    file_content = file.read()
+                    file_content = file.read()  
 
             # Procesar el documento según su tipo
             logger.debug(f'Procesando documento de tipo: {doc_type}')
@@ -146,7 +147,24 @@ def process_document():
                     logger.debug('Conversión completada')
 
             # Subir el archivo a MinIO
-            file_url = minio_service.upload_file(temp_file_name, file_name)
+            
+            files = {'file': open(temp_file_name, 'rb')}
+            payload = {
+                'file_name': file_name,
+                'file_type': doc_type,
+                'bucket_name': "document-bucket"
+            }
+
+            # Realizamos la petición POST para cargar el archivo
+            upload_response = requests.post(api_storage_url, files=files, data=payload)
+            
+            # Verificar si la carga fue exitosa
+            if upload_response.status_code != 200:
+                logger.error(f'Error al subir el archivo: {upload_response.json()}')
+                return jsonify({"error": "Error al subir el archivo a MinIO"}), 500
+
+            # Obtener la URL del archivo subido
+            file_url = upload_response.json().get('file_url')
             logger.debug(f'Documento subido exitosamente. URL: {file_url}')
 
         except Exception as e:
@@ -174,7 +192,7 @@ def process_document():
             "source": {
                 "type": "base64",
                 "media_type": data['source'].get('media_type', f'application/{doc_type}'),
-                "data": text_result,
+                "data": text_result,  # Aquí se coloca el texto procesado
                 "status": "success"
             }
         }), 200
@@ -186,23 +204,6 @@ def process_document():
             "details": str(e)
         }), 500
 
-@app.route('/check_file/<string:file_uuid>', methods=['GET'])
-def check_file(file_uuid):
-    try:
-        exists = minio_service.check_file_minio(file_uuid)
-        if exists:
-            return jsonify({"message": "El archivo existe.",
-                            "status": 200}), 200
-        else:
-            return jsonify({"message": "El archivo no existe.",
-                            "status": 404}), 404
-    except S3Error as e:
-        logger.error(f"Error al verificar el archivo con UUID {file_uuid}: {str(e)}")
-        return jsonify({"message": "Error al acceder al archivo.", "error": str(e)}), 500
-    except Exception as e:
-        logger.error(f"Error inesperado al verificar el archivo con UUID {file_uuid}: {str(e)}")
-        return jsonify({"message": "Error inesperado.", "error": str(e)}), 500
-    
 if __name__ == '__main__':
     logger.info('Iniciando aplicación Flask')
     app.run(debug=True, host='0.0.0.0', port=7272)

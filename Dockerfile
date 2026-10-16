@@ -13,6 +13,8 @@ RUN apt-get update && \
 # Establecer directorio de trabajo
 WORKDIR /app
 
+RUN pip install requests
+
 # Copiar archivos de requerimientos e instalar dependencias
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
