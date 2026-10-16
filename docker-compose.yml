@@ -1,0 +1,27 @@
+services:
+  joyit-cn-ai-storage-text-extraction:
+    container_name: joyit-cn-ai-storage-text-extraction
+    build: .
+    ports:
+      - "7000:7000"
+    networks:
+      - joyit_screening_net
+    volumes:
+      - ./app.py:/app/app.py
+      - ./src:/app/src
+    environment:
+      - MINIO_ROOT_USER
+      - MINIO_ROOT_PASSWORD
+      - MINIO_BUCKET_NAME
+      - MINIO_ACCESS_KEY
+      - MINIO_SECRET_KEY
+      - MINIO_HOST
+      - MINIO_PORT
+      - FLASK_DEBUG=1
+      - FLASK_APP=app.py
+    expose:
+      - 7272
+
+networks:
+  joyit_screening_net:
+    external: true
