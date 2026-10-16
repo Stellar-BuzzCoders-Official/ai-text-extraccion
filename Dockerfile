@@ -26,4 +26,4 @@ COPY src ./src
 EXPOSE 7272
 
 # Comando para ejecutar la aplicación
-CMD ["sh", "-c", "flask run --host=0.0.0.0 --port=7000"]
+CMD ["sh", "-c", "flask run --host=0.0.0.0 --port=7272"]

@@ -1,6 +1,6 @@
 services:
   joyit-cn-ai-text-extraction:
-    container_name: joyit-cn-ai-storage-text-extraction
+    container_name: joyit-cn-ai-text-extraction
     build: .
     ports:
       - "7000:7000"
